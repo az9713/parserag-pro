@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ParseRAG</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <script>
+        // Apply theme before paint to avoid flash.
+        (function() {
+            try {
+                var saved = localStorage.getItem('parserag-theme');
+                var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+            } catch (e) { /* ignore storage errors */ }
+        })();
+    </script>
+    <style>
+        :root {
+            --bg: #f4f1eb;
+            --bg-alt: #ebe7df;
+            --ink: #1a1a1a;
+            --ink-light: #4a4a4a;
+            --ink-muted: #8a8a8a;
+            --accent: #c45d3a;
+            --accent-light: #e8d5ce;
+            --success: #2d6a4f;
+            --border: #d4d0c8;
+            --blue: #0969da;
+            --purple: #8250df;
+            --amber: #bf8700;
+            --input-bg: #ffffff;
+            --modal-shadow: rgba(0,0,0,0.2);
+            --overlay: rgba(0,0,0,0.7);
+        }
+
+        [data-theme="dark"] {
+            --bg: #1a1815;
+            --bg-alt: #252220;
+            --ink: #ece7dd;
+            --ink-light: #bbb4a6;
+            --ink-muted: #7a7468;
+            --accent: #e07a55;
+            --accent-light: #3d2a22;
+            --success: #6bbf94;
+            --border: #3a3530;
+            --blue: #6cb0ff;
+            --purple: #b794f4;
+            --amber: #e5b547;
+            --input-bg: #100f0d;
+            --modal-shadow: rgba(0,0,0,0.6);
+            --overlay: rgba(0,0,0,0.85);
+        }
+
+        html { background: var(--bg); }
+        body, .query-input, .modal-overlay, .modal, .step, .process-badge {
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        ::selection { background: var(--accent); color: var(--bg); }
+
+        body {
+            font-family: 'IBM Plex Mono', monospace;
+            background: var(--bg);
+            color: var(--ink);
+            min-height: 100vh;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .page { max-width: 1400px; margin: 0 auto; padding: 40px; }
+
+        /* Masthead */
+        .masthead {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 2px solid var(--ink);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+
+        .title-block { display: flex; align-items: baseline; gap: 16px; }
+
+        .site-title {
+            font-family: 'Instrument Serif', serif;
+            font-size: 42px;
+            font-weight: 400;
+            letter-spacing: -1px;
+        }
+
+        .version {
+            font-size: 11px;
+            color: var(--ink-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .masthead-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .theme-toggle {
+            background: transparent;
+            border: 1px solid var(--ink);
+            color: var(--ink);
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1;
+            transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .theme-toggle:hover {
+            background: var(--ink);
+            color: var(--bg);
+        }
+        .theme-toggle:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        .theme-toggle .icon-sun { display: none; }
+        .theme-toggle .icon-moon { display: inline; }
+        [data-theme="dark"] .theme-toggle .icon-sun { display: inline; }
+        [data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--ink-muted);
+        }
+        .status-dot.active { background: var(--success); }
+        .status-dot.error { background: var(--accent); }
+        .status-dot.warning { background: var(--amber); }
+
+        /* Process Section */
+        .process-section {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .process-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border);
+            background: var(--bg-alt);
+        }
+
+        .badge-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--ink-muted);
+        }
+        .badge-dot.indexed { background: var(--success); }
+
+        .process-btn {
+            background: transparent;
+            border: 1px solid var(--ink);
+            padding: 6px 16px;
+            font-family: inherit;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .process-btn:hover { background: var(--ink); color: var(--bg); }
+        .process-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Query Section */
+        .query-section { margin-bottom: 40px; }
+
+        .query-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--ink-muted);
+            margin-bottom: 12px;
+        }
+
+        .query-row { display: flex; gap: 0; }
+
+        .query-input {
+            flex: 1;
+            background: var(--bg);
+            border: 2px solid var(--ink);
+            border-right: none;
+            padding: 16px 20px;
+            font-family: inherit;
+            font-size: 16px;
+            color: var(--ink);
+        }
+        .query-input:focus { outline: none; background: var(--input-bg); }
+        .query-input::placeholder { color: var(--ink-muted); font-style: italic; }
+
+        .query-btn {
+            background: var(--ink);
+            color: var(--bg);
+            border: 2px solid var(--ink);
+            padding: 16px 32px;
+            font-family: inherit;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .query-btn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+        .query-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Progress */
+        .progress-bar {
+            height: 3px;
+            background: var(--border);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+        }
+        .progress-bar.active .progress-fill {
+            animation: indeterminate 1.5s infinite;
+        }
+        @keyframes indeterminate {
+            0% { transform: translateX(-100%); width: 30%; }
+            50% { width: 50%; }
+            100% { transform: translateX(400%); width: 30%; }
+        }
+
+        /* Main Grid */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+        @media (max-width: 1000px) { .main-grid { grid-template-columns: 1fr; } }
+
+        .section { min-height: 200px; }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--ink-muted);
+        }
+
+        .section-meta {
+            font-size: 11px;
+            color: var(--ink-muted);
+        }
+
+        /* Steps */
+        .steps-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .step {
+            background: var(--bg-alt);
+            border-left: 3px solid var(--ink-muted);
+            padding: 16px 20px;
+            animation: appear 0.3s ease;
+        }
+        @keyframes appear {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .step.search { border-left-color: var(--blue); }
+        .step.get_image { border-left-color: var(--purple); }
+        .step.thinking { border-left-color: var(--amber); }
+        .step.error { border-left-color: var(--accent); }
+        .step.scan_folder { border-left-color: #0891b2; }
+        .step.parse_file { border-left-color: var(--success); }
+        .step.preview_file { border-left-color: #0d9488; }
+        .step.grep { border-left-color: #ca8a04; }
+        .step.glob { border-left-color: #ea580c; }
+        .step.read_file { border-left-color: var(--ink-muted); }
+
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
+        .step-id { font-weight: 600; font-size: 12px; }
+
+        .step-tool {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--ink-light);
+        }
+
+        .step-detail {
+            font-size: 13px;
+            color: var(--ink-light);
+            margin-bottom: 6px;
+            word-break: break-word;
+        }
+        .step-detail::before { content: '→ '; color: var(--ink-muted); }
+
+        .step-preview {
+            font-size: 12px;
+            color: var(--ink-muted);
+            font-style: italic;
+            line-height: 1.5;
+            max-height: 80px;
+            overflow: hidden;
+        }
+
+        /* Empty State */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            color: var(--ink-muted);
+            text-align: center;
+        }
+        .empty-state .prompt {
+            font-family: 'Instrument Serif', serif;
+            font-size: 24px;
+            font-style: italic;
+            margin-bottom: 8px;
+            color: var(--ink-light);
+        }
+        .empty-state .hint { font-size: 12px; }
+
+        /* Result */
+        .result-content { line-height: 1.8; }
+
+        .result-text {
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .result-text strong { font-weight: 700; }
+
+        /* Stats Bar */
+        .stats-bar {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid var(--ink);
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 20px;
+        }
+
+        .stat { text-align: center; }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'Instrument Serif', serif;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--ink-muted);
+            margin-top: 4px;
+        }
+
+        /* Loading */
+        .loading-text {
+            font-style: italic;
+            color: var(--ink-muted);
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Scrollbar */
+        .scrollable { max-height: 350px; overflow-y: auto; }
+        .scrollable::-webkit-scrollbar { width: 8px; }
+        .scrollable::-webkit-scrollbar-track { background: var(--bg-alt); }
+        .scrollable::-webkit-scrollbar-thumb { background: var(--border); }
+        .scrollable::-webkit-scrollbar-thumb:hover { background: var(--ink-muted); }
+
+        /* Citations */
+        .citation {
+            background: var(--accent-light);
+            color: var(--accent);
+            padding: 2px 8px;
+            font-size: 11px;
+            border-radius: 3px;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .citation:hover {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        /* Screenshot Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--overlay);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal {
+            background: var(--bg);
+            border: 2px solid var(--ink);
+            padding: 20px;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+            position: relative;
+            box-shadow: 8px 8px 0 var(--modal-shadow);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+        }
+        .modal-title {
+            font-family: 'Instrument Serif', serif;
+            font-size: 20px;
+        }
+        .modal-close {
+            background: transparent;
+            border: 1px solid var(--ink);
+            padding: 4px 12px;
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .modal-close:hover {
+            background: var(--ink);
+            color: var(--bg);
+        }
+        .modal img {
+            max-width: 100%;
+            border: 1px solid var(--border);
+        }
+        .modal-meta {
+            font-size: 11px;
+            color: var(--ink-muted);
+            margin-top: 8px;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--ink-muted);
+            text-align: center;
+        }
+
+        /* Session badge */
+        .session-badge {
+            font-size: 11px;
+            color: var(--ink-muted);
+            margin-top: 6px;
+            letter-spacing: 0.5px;
+        }
+        .session-badge span {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* Export buttons row */
+        .export-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        /* Index progress cards */
+        .step.index_start { border-left-color: var(--blue); }
+        .step.file_start { border-left-color: var(--amber); }
+        .step.file_done { border-left-color: var(--success); }
+        .step.file_error { border-left-color: var(--accent); }
+        .step.file_stage { border-left-color: var(--purple); }
+        .step.index_done { border-left-color: var(--ink); }
+
+        /* Document graph panel */
+        .graph-panel {
+            margin-top: 40px;
+            border-top: 2px solid var(--ink);
+            padding-top: 24px;
+        }
+        .graph-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+        .graph-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--ink-muted);
+        }
+        #cy {
+            height: 320px;
+            border: 1px solid var(--border);
+            background: var(--bg-alt);
+        }
+    </style>
+    <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+</head>
+<body>
+    <div class="page">
+        <!-- Masthead -->
+        <header class="masthead">
+            <div class="title-block">
+                <h1 class="site-title">ParseRAG</h1>
+                <span class="version">LiteParse + Milvus + Claude + Agentic Search</span>
+            </div>
+            <div class="masthead-right">
+                <div class="status-indicator">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Ready</span>
+                </div>
+                <button type="button" class="process-btn" onclick="newSession()" title="Start a new conversation session">
+                    New Session
+                </button>
+                <button type="button" class="theme-toggle" id="themeToggle"
+                        aria-label="Toggle dark mode" title="Toggle dark mode">
+                    <span class="icon-moon" aria-hidden="true">◐</span>
+                    <span class="icon-sun" aria-hidden="true">☀</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Process Section -->
+        <section class="process-section">
+            <div class="process-badge">
+                <span class="badge-dot" id="badgeDot"></span>
+                <span id="badgeText">Checking...</span>
+            </div>
+            <button class="process-btn" id="processBtn" onclick="processPDF()" style="display:none;">
+                Process Sample PDF
+            </button>
+            <button class="process-btn" id="indexBtn" onclick="indexAll()">
+                Index All Documents
+            </button>
+        </section>
+
+        <!-- Query -->
+        <section class="query-section">
+            <div class="query-label">Ask a question or explore documents</div>
+            <div style="display:flex; gap:8px; margin-bottom:6px; align-items:center;">
+                <span style="font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--ink-muted); white-space:nowrap;">Folder</span>
+                <input type="text" class="query-input" id="folderInput"
+                    value="data/documents"
+                    style="font-size:13px; padding:10px 14px; border:1px solid var(--border); border-right:1px solid var(--border);"
+                    autocomplete="off">
+            </div>
+            <div class="session-badge" id="sessionBadge">Session: <span>New session</span></div>
+            <div class="query-row">
+                <input type="text" class="query-input" id="queryInput"
+                    placeholder="e.g. Scan the folder and summarize what documents are available"
+                    autocomplete="off">
+                <button class="query-btn" id="queryBtn" onclick="executeQuery()">Execute</button>
+            </div>
+        </section>
+
+        <!-- Progress -->
+        <div class="progress-bar" id="progressBar">
+            <div class="progress-fill"></div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Steps -->
+            <section class="section">
+                <div class="section-header">
+                    <span class="section-title">Execution Log</span>
+                    <span class="section-meta" id="stepCount">&mdash;</span>
+                </div>
+                <div class="scrollable">
+                    <div class="steps-list" id="stepsList">
+                        <div class="empty-state">
+                            <div class="prompt">Awaiting query...</div>
+                            <div class="hint">Enter a question to begin document exploration</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Result -->
+            <section class="section">
+                <div class="section-header">
+                    <span class="section-title">Response</span>
+                </div>
+                <div class="result-content scrollable" id="resultContent">
+                    <div class="empty-state">
+                        <div class="prompt">No results yet</div>
+                        <div class="hint">Results will appear here after execution</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-bar" id="statsBar" style="display: none;">
+            <div class="stat">
+                <div class="stat-value" id="statSteps">0</div>
+                <div class="stat-label">Steps</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="statToolCalls">0</div>
+                <div class="stat-label">Tool Calls</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="statSearches">0</div>
+                <div class="stat-label">Searches</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="statImages">0</div>
+                <div class="stat-label">Images</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="statFsCalls">0</div>
+                <div class="stat-label">FS Explore</div>
+            </div>
+        </div>
+
+        <!-- Export Buttons (hidden until answer arrives) -->
+        <div class="export-row" id="exportRow" style="display:none;">
+            <button class="process-btn" onclick="exportAnswer('md')">Export Markdown</button>
+            <button class="process-btn" onclick="exportAnswer('pdf')">Export PDF</button>
+        </div>
+
+        <!-- Document Co-citation Graph -->
+        <div class="graph-panel" id="graphPanel" style="display:none;">
+            <div class="graph-header">
+                <span class="graph-title">Document Co-citation Graph</span>
+                <span class="section-meta" id="graphMeta">&mdash;</span>
+            </div>
+            <div id="cy"></div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            Powered by LiteParse &middot; Milvus &middot; Claude &middot; Agentic File Search
+        </footer>
+    </div>
+
+    <!-- Screenshot Modal -->
+    <div class="modal-overlay" id="screenshotModal" onclick="closeModal(event)">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">Source Document</span>
+                <button class="modal-close" onclick="document.getElementById('screenshotModal').classList.remove('active')">Close</button>
+            </div>
+            <img id="modalImage" src="" alt="Page screenshot">
+            <div class="modal-meta" id="modalMeta"></div>
+        </div>
+    </div>
+
+    <script>
+        let isRunning = false;
+        let sessionId = null;
+        let rawAnswerText = '';
+        let cyInstance = null;
+
+        const queryInput = document.getElementById('queryInput');
+        const queryBtn = document.getElementById('queryBtn');
+        const stepsList = document.getElementById('stepsList');
+        const stepCountEl = document.getElementById('stepCount');
+        const resultContent = document.getElementById('resultContent');
+        const statsBar = document.getElementById('statsBar');
+        const progressBar = document.getElementById('progressBar');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const processBtn = document.getElementById('processBtn');
+        const badgeDot = document.getElementById('badgeDot');
+        const badgeText = document.getElementById('badgeText');
+
+        queryInput.addEventListener('keypress', e => {
+            if (e.key === 'Enter' && !isRunning) executeQuery();
+        });
+
+        // Escape HTML
+        function esc(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        // Status
+        function setStatus(text, state) {
+            statusText.textContent = text;
+            statusDot.className = 'status-dot' + (state ? ' ' + state : '');
+        }
+
+        // Check if PDF is processed
+        async function checkStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                if (data.processed) {
+                    badgeDot.className = 'badge-dot indexed';
+                    badgeText.textContent = `Processed (${data.chunk_count} chunks)`;
+                    processBtn.style.display = 'none';
+                    setStatus('Ready', 'active');
+                } else {
+                    badgeDot.className = 'badge-dot';
+                    badgeText.textContent = 'Not Processed';
+                    processBtn.style.display = 'inline-block';
+                    setStatus('PDF not processed', 'warning');
+                }
+            } catch (e) {
+                badgeText.textContent = 'Error';
+                setStatus('Server error', 'error');
+            }
+        }
+
+        // Process PDF
+        async function processPDF() {
+            processBtn.disabled = true;
+            processBtn.textContent = 'Processing...';
+            setStatus('Processing PDF...', 'active');
+            progressBar.classList.add('active');
+
+            try {
+                const res = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    badgeDot.className = 'badge-dot indexed';
+                    badgeText.textContent = `Processed (${data.chunks} chunks)`;
+                    processBtn.style.display = 'none';
+                    setStatus('Ready', 'active');
+                } else {
+                    throw new Error(data.detail || 'Processing failed');
+                }
+            } catch (e) {
+                setStatus('Error: ' + e.message, 'error');
+                processBtn.disabled = false;
+                processBtn.textContent = 'Process PDF';
+            }
+            progressBar.classList.remove('active');
+        }
+
+        // Index all documents via SSE stream
+        async function indexAll() {
+            const btn = document.getElementById('indexBtn');
+            btn.disabled = true;
+            btn.textContent = 'Indexing...';
+            setStatus('Indexing documents...', 'active');
+            progressBar.classList.add('active');
+
+            // Clear steps area and show indexing progress there
+            stepsList.innerHTML = '';
+            stepCountEl.textContent = '—';
+
+            try {
+                const response = await fetch('/api/index/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ directory: 'data/documents', reset: true }),
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const raw = line.slice(6);
+                            if (raw === '[DONE]') continue;
+                            try {
+                                handleIndexEvent(JSON.parse(raw));
+                            } catch (e) { /* skip malformed */ }
+                        }
+                    }
+                }
+                setStatus('Ready', 'active');
+            } catch (e) {
+                setStatus('Error: ' + e.message, 'error');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Index All Documents';
+            progressBar.classList.remove('active');
+        }
+
+        // Handle index stream events
+        function handleIndexEvent(event) {
+            const div = document.createElement('div');
+            switch (event.type) {
+                case 'index_start': {
+                    div.className = 'step index_start';
+                    div.innerHTML = `<div class="step-header"><span class="step-id">Start</span><span class="step-tool">INDEX START</span></div><div class="step-detail">Indexing ${event.total} PDF file(s)</div>`;
+                    stepsList.appendChild(div);
+                    break;
+                }
+                case 'file_start': {
+                    div.className = 'step file_start';
+                    div.innerHTML = `<div class="step-header"><span class="step-id">[${event.index}/${event.total}]</span><span class="step-tool">FILE START</span></div><div class="step-detail">${esc(event.file)}</div>`;
+                    stepsList.appendChild(div);
+                    break;
+                }
+                case 'file_stage': {
+                    div.className = 'step file_stage';
+                    div.innerHTML = `<div class="step-header"><span class="step-id">Stage</span><span class="step-tool">${esc(event.stage.toUpperCase())}</span></div><div class="step-detail">${esc(event.file)}</div>`;
+                    stepsList.appendChild(div);
+                    break;
+                }
+                case 'file_done': {
+                    div.className = 'step file_done';
+                    div.innerHTML = `<div class="step-header"><span class="step-id">Done</span><span class="step-tool">FILE DONE</span></div><div class="step-detail">${esc(event.file)} &mdash; ${event.chunks} chunks</div>`;
+                    stepsList.appendChild(div);
+                    badgeDot.className = 'badge-dot indexed';
+                    badgeText.textContent = `Indexed`;
+                    processBtn.style.display = 'none';
+                    break;
+                }
+                case 'file_error': {
+                    div.className = 'step file_error';
+                    div.innerHTML = `<div class="step-header"><span class="step-id">Error</span><span class="step-tool">FILE ERROR</span></div><div class="step-detail">${esc(event.file)}</div><div class="step-preview">${esc(event.error)}</div>`;
+                    stepsList.appendChild(div);
+                    break;
+                }
+                case 'index_done': {
+                    div.className = 'step index_done';
+                    div.innerHTML = `<div class="step-header"><span class="step-id">Complete</span><span class="step-tool">INDEX DONE</span></div><div class="step-detail">Processed: ${event.files_processed} | Failed: ${event.files_failed} | Chunks: ${event.chunks}</div>`;
+                    stepsList.appendChild(div);
+                    badgeDot.className = 'badge-dot indexed';
+                    badgeText.textContent = `Indexed (${event.files_processed} files, ${event.chunks} chunks)`;
+                    stepCountEl.textContent = `${event.files_processed} files`;
+                    break;
+                }
+                case 'error': {
+                    div.className = 'step error';
+                    div.innerHTML = `<div class="step-header"><span class="step-id">Error</span><span class="step-tool">ERROR</span></div><div class="step-detail">${esc(event.message)}</div>`;
+                    stepsList.appendChild(div);
+                    break;
+                }
+            }
+            if (div.parentNode) {
+                stepsList.scrollTop = stepsList.scrollHeight;
+            }
+        }
+
+        // Update session badge display
+        function updateSessionBadge() {
+            const badge = document.getElementById('sessionBadge');
+            if (sessionId) {
+                badge.innerHTML = `Session: <span>${sessionId.slice(0, 8)}</span>`;
+            } else {
+                badge.innerHTML = `Session: <span>New session</span>`;
+            }
+        }
+
+        // Start a new session
+        function newSession() {
+            sessionId = null;
+            rawAnswerText = '';
+            updateSessionBadge();
+            // Clear UI
+            stepsList.innerHTML = '<div class="empty-state"><div class="prompt">Awaiting query...</div><div class="hint">Enter a question to begin document exploration</div></div>';
+            resultContent.innerHTML = '<div class="empty-state"><div class="prompt">No results yet</div><div class="hint">Results will appear here after execution</div></div>';
+            statsBar.style.display = 'none';
+            document.getElementById('exportRow').style.display = 'none';
+            document.getElementById('graphPanel').style.display = 'none';
+            stepCountEl.textContent = '—';
+        }
+
+        // Export answer to Markdown or PDF
+        async function exportAnswer(format) {
+            if (!rawAnswerText) return;
+            try {
+                const res = await fetch('/api/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ format, content: rawAnswerText }),
+                });
+                if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = format === 'pdf' ? 'parserag-report.pdf' : 'parserag-report.md';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (e) {
+                setStatus('Export error: ' + e.message, 'error');
+            }
+        }
+
+        // Load and render the co-citation graph
+        async function loadGraph() {
+            try {
+                const res = await fetch('/api/graph');
+                const data = await res.json();
+                if (!data.nodes || data.nodes.length === 0) return;
+
+                const graphPanel = document.getElementById('graphPanel');
+                const graphMeta = document.getElementById('graphMeta');
+                graphPanel.style.display = 'block';
+                graphMeta.textContent = `${data.nodes.length} nodes, ${data.edges.length} edges`;
+
+                const elements = [
+                    ...data.nodes.map(n => ({ data: { id: n.id } })),
+                    ...data.edges.map(e => ({
+                        data: { source: e.source, target: e.target, weight: e.weight }
+                    })),
+                ];
+
+                const accentColor = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--accent').trim() || '#c45d3a';
+                const borderColor = getComputedStyle(document.documentElement)
+                    .getPropertyValue('--border').trim() || '#d4d0c8';
+
+                if (cyInstance) {
+                    cyInstance.destroy();
+                    cyInstance = null;
+                }
+
+                cyInstance = cytoscape({
+                    container: document.getElementById('cy'),
+                    elements,
+                    style: [
+                        {
+                            selector: 'node',
+                            style: {
+                                'background-color': accentColor,
+                                'label': 'data(id)',
+                                'font-size': '9px',
+                                'color': '#fff',
+                                'text-valign': 'center',
+                                'text-halign': 'center',
+                                'text-wrap': 'ellipsis',
+                                'text-max-width': '80px',
+                                'width': 40,
+                                'height': 40,
+                            },
+                        },
+                        {
+                            selector: 'edge',
+                            style: {
+                                'width': 'data(weight)',
+                                'line-color': borderColor,
+                                'curve-style': 'bezier',
+                            },
+                        },
+                    ],
+                    layout: { name: 'cose' },
+                });
+
+                // Tap a node to pre-fill query input
+                cyInstance.on('tap', 'node', function(evt) {
+                    const nodeId = evt.target.id();
+                    queryInput.value = `Summarise ${nodeId}`;
+                    queryInput.focus();
+                });
+            } catch (e) {
+                // Graph load failure is non-critical; silently skip
+            }
+        }
+
+        // Execute query
+        async function executeQuery() {
+            const question = queryInput.value.trim();
+            if (!question || isRunning) return;
+
+            isRunning = true;
+            queryBtn.disabled = true;
+
+            stepsList.innerHTML = '';
+            resultContent.innerHTML = '<div class="loading-text">Thinking...</div>';
+            statsBar.style.display = 'none';
+            document.getElementById('exportRow').style.display = 'none';
+            document.getElementById('graphPanel').style.display = 'none';
+            stepCountEl.textContent = '\u2014';
+            progressBar.classList.add('active');
+            setStatus('Executing', 'active');
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question,
+                        folder: document.getElementById('folderInput').value.trim(),
+                        session_id: sessionId,
+                    }),
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const raw = line.slice(6);
+                            if (raw === '[DONE]') continue;
+                            try {
+                                handleEvent(JSON.parse(raw));
+                            } catch (e) { /* skip malformed */ }
+                        }
+                    }
+                }
+            } catch (e) {
+                resultContent.innerHTML = `<div class="empty-state">
+                    <div class="prompt">Error</div>
+                    <div class="hint">${esc(e.message)}</div>
+                </div>`;
+                setStatus('Error', 'error');
+            }
+
+            isRunning = false;
+            queryBtn.disabled = false;
+            progressBar.classList.remove('active');
+        }
+
+        // Handle SSE events
+        function handleEvent(event) {
+            switch (event.type) {
+                case 'start':
+                    if (event.session_id) {
+                        sessionId = event.session_id;
+                        updateSessionBadge();
+                    }
+                    break;
+
+                case 'thinking': {
+                    addStep('thinking', event.step, 'Thinking', event.content, '');
+                    break;
+                }
+
+                case 'tool_call': {
+                    let detail = '';
+                    const inp = event.input;
+                    switch (event.tool) {
+                        case 'search':
+                            detail = `query: "${inp.query}"${inp.limit ? ` (limit: ${inp.limit})` : ''}`;
+                            break;
+                        case 'get_image':
+                            detail = `path: ${inp.image_path}`;
+                            break;
+                        case 'scan_folder':
+                            detail = `directory: ${inp.directory}`;
+                            break;
+                        case 'preview_file':
+                        case 'parse_file':
+                        case 'read_file':
+                            detail = `file: ${inp.file_path}`;
+                            break;
+                        case 'grep':
+                            detail = `pattern: "${inp.pattern}" in ${inp.file_path}`;
+                            break;
+                        case 'glob':
+                            detail = `pattern: "${inp.pattern}" in ${inp.directory}`;
+                            break;
+                        case 'extract_table':
+                            detail = `file: ${inp.file_path}${inp.page_num ? ` page ${inp.page_num}` : ''}`;
+                            break;
+                        default:
+                            detail = JSON.stringify(inp).slice(0, 150);
+                    }
+                    addStep(event.tool, event.step, event.tool, detail, event.preview);
+                    break;
+                }
+
+                case 'answer': {
+                    rawAnswerText = event.content;
+                    renderAnswer(event.content);
+                    if (event.stats) {
+                        statsBar.style.display = 'grid';
+                        document.getElementById('statSteps').textContent = event.stats.steps;
+                        document.getElementById('statToolCalls').textContent = event.stats.tool_calls;
+                        document.getElementById('statSearches').textContent = event.stats.search_calls;
+                        document.getElementById('statImages').textContent = event.stats.image_calls;
+                        document.getElementById('statFsCalls').textContent = event.stats.fs_calls || 0;
+                    }
+                    document.getElementById('exportRow').style.display = 'flex';
+                    loadGraph();
+                    setStatus('Complete', 'active');
+                    break;
+                }
+
+                case 'error': {
+                    addStep('error', 0, 'Error', event.message, '');
+                    resultContent.innerHTML = `<div class="empty-state">
+                        <div class="prompt">Error</div>
+                        <div class="hint">${esc(event.message)}</div>
+                    </div>`;
+                    setStatus('Error', 'error');
+                    break;
+                }
+            }
+        }
+
+        // Add a step card
+        function addStep(type, step, toolName, detail, preview) {
+            stepCountEl.textContent = `${step} ${step === 1 ? 'step' : 'steps'}`;
+
+            const div = document.createElement('div');
+            div.className = `step ${type}`;
+            div.innerHTML = `
+                <div class="step-header">
+                    <span class="step-id">#${step}</span>
+                    <span class="step-tool">${esc(toolName)}</span>
+                </div>
+                ${detail ? `<div class="step-detail">${esc(detail)}</div>` : ''}
+                ${preview ? `<div class="step-preview">${esc(preview)}</div>` : ''}
+            `;
+            stepsList.appendChild(div);
+            stepsList.scrollTop = stepsList.scrollHeight;
+        }
+
+        // Render final answer with clickable citations
+        function renderAnswer(text) {
+            let html = esc(text);
+            // Bold
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Bullets
+            html = html.replace(/\n- /g, '\n• ');
+            // Citations: [Source: filename | Page N | screenshot_path]
+            html = html.replace(
+                /\[Source:\s*([^|]+?)\s*\|\s*Page\s*(\d+)\s*\|\s*([^\]]+?)\]/g,
+                (match, file, page, path) => {
+                    const cleanFile = file.trim();
+                    const cleanPath = path.trim();
+                    return `<span class="citation" onclick="showScreenshot('${esc(cleanPath)}', '${esc(cleanFile)}', ${page})" title="Click to view source">${cleanFile} p.${page}</span>`;
+                }
+            );
+            resultContent.innerHTML = `<div class="result-text">${html}</div>`;
+        }
+
+        // Screenshot modal
+        function showScreenshot(path, filename, page) {
+            const modal = document.getElementById('screenshotModal');
+            const img = document.getElementById('modalImage');
+            const title = document.getElementById('modalTitle');
+            const meta = document.getElementById('modalMeta');
+
+            title.textContent = filename;
+            meta.textContent = `Page ${page} — ${path}`;
+            img.src = `/api/screenshot/${path}`;
+            img.alt = `${filename} page ${page}`;
+            modal.classList.add('active');
+        }
+
+        function closeModal(event) {
+            if (event.target === event.currentTarget) {
+                event.currentTarget.classList.remove('active');
+            }
+        }
+
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        function currentTheme() {
+            return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        }
+        function setTheme(theme) {
+            if (theme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+            }
+            themeToggle.setAttribute('aria-pressed', theme === 'dark');
+            try { localStorage.setItem('parserag-theme', theme); } catch (e) { /* ignore */ }
+        }
+        themeToggle.addEventListener('click', () => {
+            setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+        });
+        themeToggle.setAttribute('aria-pressed', currentTheme() === 'dark');
+
+        // Init
+        checkStatus();
+    </script>
+</body>
+</html>
