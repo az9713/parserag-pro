@@ -4,6 +4,19 @@
 
 ---
 
+## Documentation
+
+| Document | What It Contains |
+|----------|-----------------|
+| [`IMPROVEMENTS.md`](IMPROVEMENTS.md) | The 5 engineering improvements — what each one fixes, why it matters, and how it is better than the original |
+| [`DECISIONS.md`](DECISIONS.md) | Decision log for each improvement — problem statement, chosen approach, pros and cons |
+| [`FEATURES.md`](FEATURES.md) | The 5 new features — what each one does and the user-facing behaviour |
+| [`FEATURE_DECISIONS.md`](FEATURE_DECISIONS.md) | Decision log for each feature — design alternatives considered, tradeoffs, and new files added |
+| [`TESTING.md`](TESTING.md) | End-to-end test plan — exact commands to reproduce every test from a clean install |
+| [`TEST_REPORT.md`](TEST_REPORT.md) | Test results — what was tested, how, what passed, and what could not be automated |
+
+---
+
 ## What's New in This Fork
 
 ### 5 Engineering Improvements
